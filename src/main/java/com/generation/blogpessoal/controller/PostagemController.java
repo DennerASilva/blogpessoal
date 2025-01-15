@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.generation.blogpessoal.model.Postagem;
 import com.generation.blogpessoal.repository.PostagemRepository;
+import com.generation.blogpessoal.repository.TemaRepository;
 
 import jakarta.validation.Valid;
 
@@ -31,19 +32,29 @@ public class PostagemController {
 	@Autowired // O Spring dá autonomia para a Interface poder invocar os métodos
 	private PostagemRepository postagemRepository;
 	
+	@Autowired
+	private TemaRepository temaRepository;
+	
 	@GetMapping // Indica que esse método é chamado em Verbos/Métodos HTTP do tipo Get
 	public ResponseEntity<List<Postagem>> getAll() {
 		return ResponseEntity.ok(postagemRepository.findAll()); //SELECT * FROM tb_postagens
 	}
 	
-	@GetMapping("/{id}")
-	public ResponseEntity<Postagem> getById(@PathVariable Long id) {
-		return postagemRepository.findById(id)
-				.map(resposta -> ResponseEntity.ok(resposta))
-				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,"Não foi encontrado"));
-				//.orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)).build()); 
+	@GetMapping("/{id}") // postagens/2 quando ID = 2. 
+	public ResponseEntity<Postagem> getById(@PathVariable Long id) { //id = 2
+		return postagemRepository.findById(id) //fazendo e guardando o resultado em um Optional 
+				.map(resposta -> ResponseEntity.ok(resposta)) // o .map faz a validação (if) se a busca foi concluída. E caso sim, retorna o status 200 (OK)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,"Não foi encontrado")); // Caso a validação não seja verdade (else), retorna o status 404 (Não encontrado) e uma mensagem personalizada
+			
+		
+				/* A forma como está na documentação (sem a mensagem personalizada)
+				 * 
+				 * .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)).build()); 
+				 */
 				
-				/*Optional<Postagem> PostagemOpt = postagemRepository.findById(id);
+				/* Como seria usando a estrutura do Optional, junto com If-Else:
+				 * 
+				 * Optional<Postagem> PostagemOpt = postagemRepository.findById(id);
 				if(PostagemOpt.isEmpty()) {
 					throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Postagem não encontrada.");
 				}
@@ -56,18 +67,27 @@ public class PostagemController {
 	}
 	
 	@PostMapping
-	public ResponseEntity<Postagem> post (@Valid @RequestBody Postagem postagem) {
-		return ResponseEntity.status(HttpStatus.CREATED)
-				.body(postagemRepository.save(postagem));
+	public ResponseEntity<Postagem> post (@Valid @RequestBody Postagem postagem) { // Postagem = {"titulo" = "ababuble ..."}
+		if (temaRepository.existsById(postagem.getTema().getId()))
+			return ResponseEntity.status(HttpStatus.CREATED) 
+					.body(postagemRepository.save(postagem)); // Postagem = {id, data, titulo, texto...}
+		
+		throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Tema não existe!");
 	}
 	
 	@PutMapping
 	public ResponseEntity<Postagem> put(@Valid @RequestBody Postagem postagem){
-		return postagemRepository.findById(postagem.getId())
-				.map(resposta -> ResponseEntity.status(HttpStatus.OK).body(postagemRepository.save(postagem)))
-				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,"A postagem a ser atualizada não foi encontrada"));
-			//	.orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+		if (postagemRepository.existsById(postagem.getId())) {
+		
+			if (temaRepository.existsById(postagem.getTema().getId()))
+				return ResponseEntity.status(HttpStatus.OK)
+						.body(postagemRepository.save(postagem));
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Tema não existe!");
+		}
+		
+		return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
 	}
+		
 	
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	@DeleteMapping("/{id}")
@@ -77,6 +97,6 @@ public class PostagemController {
 		if(postagemOpt.isEmpty())
 			throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Postagem não encontrada");
 		postagemRepository.deleteById(id);		
-	}
+	}	
 	
 }
